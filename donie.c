@@ -92,6 +92,9 @@ PHP_MINIT_FUNCTION(donie)
 	/* If you have INI entries, uncomment these lines
 	REGISTER_INI_ENTRIES();
 	*/
+
+	time_of_minit = time(NULL);
+
 	return SUCCESS;
 }
 /* }}} */
@@ -103,6 +106,13 @@ PHP_MSHUTDOWN_FUNCTION(donie)
 	/* uncomment this line if you have INI entries
 	UNREGISTER_INI_ENTRIES();
 	*/
+
+	/*
+	 * FILE *fp = fopen("/tmp/php-donie.txt", "a+");
+	 * fprintf(fp, "php-donie shutting down on module at %d\n", time(NULL));
+	 * fclose(fp);
+	 */
+
 	return SUCCESS;
 }
 /* }}} */
@@ -115,6 +125,9 @@ PHP_RINIT_FUNCTION(donie)
 #if defined(COMPILE_DL_DONIE) && defined(ZTS)
 	ZEND_TSRMLS_CACHE_UPDATE();
 #endif
+
+	time_of_rinit = time(NULL);
+
 	return SUCCESS;
 }
 /* }}} */
@@ -124,6 +137,14 @@ PHP_RINIT_FUNCTION(donie)
  */
 PHP_RSHUTDOWN_FUNCTION(donie)
 {
+	// Will raise segfault on fastcgi requests.
+	/* FILE *fp = fopen("/tmp/php-donie.txt", "a+"); */
+	/* fprintf(fp, "php-donie shutting down on module at %d\n", time(NULL)); */
+	/* fclose(fp); */
+
+	/* free(time_of_rinit); */
+	/* time_of_rinit = NULL; */
+
 	return SUCCESS;
 }
 /* }}} */
@@ -146,13 +167,42 @@ PHP_MINFO_FUNCTION(donie)
  *
  * Every user visible function must have an entry in donie_functions[].
  */
+
+/* yet another hello-world. */
 ZEND_FUNCTION(donie_hello)
 {
 	php_printf("Hello donie !");
 }
+
+/* module and request resouce usage demo. */
+ZEND_FUNCTION(donie_test_resource)
+{
+	php_printf("time_of_minit: %d<br/>", time_of_minit);
+	php_printf("time_of_rinit: %d<br/>", time_of_rinit);
+	return;
+}
+
+/* return string demo & check if return value is used. */
+ZEND_FUNCTION(donie_get_name)
+{
+	if (return_value_used)
+	{
+		RETURN_STRING("Donie Leigh", 1);
+	}
+	else
+	{
+		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "You should use my return value.");
+        RETURN_NULL();
+	}
+}
+
+/* register all functions here. */
 const zend_function_entry donie_functions[] = {
 	PHP_FE(confirm_donie_compiled,	NULL)		/* For testing, remove later. */
-	PHP_FE(donie_hello,	NULL)		/* For testing, remove later. */
+	PHP_FE(donie_hello,	NULL)
+	ZEND_FALIAS(donie_hi, donie_hello, NULL)	/* function aliasing demo. */
+	PHP_FE(donie_test_resource,	NULL)
+	PHP_FE(donie_get_name,	NULL)
 	PHP_FE_END	/* Must be the last line in donie_functions[] */
 };
 /* }}} */

@@ -64,6 +64,8 @@ ZEND_TSRMLS_CACHE_EXTERN();
 
 #endif	/* PHP_DONIE_H */
 
+int time_of_minit;
+int time_of_rinit;
 
 /*
  * Local variables:
