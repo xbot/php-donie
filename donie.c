@@ -196,6 +196,43 @@ ZEND_FUNCTION(donie_get_name)
 	}
 }
 
+/*
+ * Test parsing function parameters.
+ */
+ZEND_FUNCTION(donie_parse_parameters)
+{
+	char *name;
+	int name_len;
+	int age;
+	char *optional_name = "leigh";
+	int optional_name_len = sizeof(optional_name) - 1;
+	zval *nonsense;
+	zval *forced_seperation;
+	zval *unforced_seperation;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "slz!z/z|s", &name, &name_len, &age, &nonsense, &forced_seperation, &unforced_seperation, &optional_name, &optional_name_len) == FAILURE)
+	{
+		RETURN_NULL();
+	}
+
+	php_printf("Got string param: name=%s, length is %d\n", name, name_len);
+	php_printf("Got int param: age=%d\n", age);
+
+	if (!nonsense)
+	{
+		php_printf("Got a C-NULL for param $nonsense.\n");
+	}
+	else
+	{
+		php_printf("Got some value for nonsense.\n");
+	}
+
+	php_printf("forced_seperation->refcount__gc=%d\n", forced_seperation->refcount__gc);
+	php_printf("unforced_seperation->refcount__gc=%d\n", unforced_seperation->refcount__gc);
+
+	php_printf("Optional param: optional_name=%s, length is %d\n", optional_name, optional_name_len);
+}
+
 /* register all functions here. */
 const zend_function_entry donie_functions[] = {
 	PHP_FE(confirm_donie_compiled,	NULL)		/* For testing, remove later. */
@@ -203,6 +240,7 @@ const zend_function_entry donie_functions[] = {
 	ZEND_FALIAS(donie_hi, donie_hello, NULL)	/* function aliasing demo. */
 	PHP_FE(donie_test_resource,	NULL)
 	PHP_FE(donie_get_name,	NULL)
+	PHP_FE(donie_parse_parameters,	NULL)
 	PHP_FE_END	/* Must be the last line in donie_functions[] */
 };
 /* }}} */
