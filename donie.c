@@ -233,6 +233,84 @@ ZEND_FUNCTION(donie_parse_parameters)
 	php_printf("Optional param: optional_name=%s, length is %d\n", optional_name, optional_name_len);
 }
 
+/*
+ * test hashtable operations
+ */
+ZEND_FUNCTION(donie_test_hashtable)
+{
+	// init hashtable
+	HashTable *myht;
+	ALLOC_HASHTABLE(myht);
+	if (zend_hash_init(myht, 100, NULL, NULL, 0) == FAILURE)
+	{
+		FREE_HASHTABLE(myht);
+		RETURN_NULL();
+	}
+
+	// add a string with an integer key 2 to myht
+	zval *zv1;
+	MAKE_STD_ZVAL(zv1);
+	ZVAL_STRING(zv1, "Hello HT !", 1);
+	zend_hash_index_update(myht, 2, &zv1, sizeof(zval *), NULL);
+
+	// get the next free key
+	php_printf("The next free key will be %ld.\n", zend_hash_next_free_element(myht));
+
+	// append an integer to myht
+	zval *zv2;
+	MAKE_STD_ZVAL(zv2);
+	ZVAL_LONG(zv2, 2015);
+	if (zend_hash_next_index_insert(myht, &zv2, sizeof(zval *), NULL) == FAILURE)
+	{
+		php_printf("HashTable appendation failed.\n");
+	}
+	else
+	{
+		php_printf("HashTable appendation succeeded.\n");
+	}
+
+	// get the size
+	php_printf("HashTable has a size of %d.\n", zend_hash_num_elements(myht));
+
+	// check if an integer key exists
+	int idx = 3;
+	if (zend_hash_index_exists(myht, idx))
+	{
+		php_printf("HashTable has an index of the value %ld.\n", idx);
+	}
+	else
+	{
+		php_printf("HashTable does not have an index of the value %ld.\n", idx);
+	}
+
+	// get a value by its key
+	zval **zval_dest;
+	if (zend_hash_index_find(myht, idx, (void **) &zval_dest) == SUCCESS)
+	{
+		php_printf("The value indexed by %ld is %Z.\n", idx, *zval_dest);
+	}
+	else
+	{
+		php_printf("The value indexed by %ld does not exist.\n", idx);
+	}
+
+	// delete the specified value from myht
+	if (zend_hash_index_del(myht, idx) == FAILURE)
+	{
+		php_printf("The value indexed by %ld failed to be deleted.\n", idx);
+	}
+	else
+	{
+		php_printf("The value indexed by %ld is deleted.\n", idx);
+	}
+
+	// destroy hashtable
+	zend_hash_destroy(myht);
+	FREE_HASHTABLE(myht);
+
+	RETURN_NULL();
+}
+
 /* register all functions here. */
 const zend_function_entry donie_functions[] = {
 	PHP_FE(confirm_donie_compiled,	NULL)		/* For testing, remove later. */
@@ -241,6 +319,7 @@ const zend_function_entry donie_functions[] = {
 	PHP_FE(donie_test_resource,	NULL)
 	PHP_FE(donie_get_name,	NULL)
 	PHP_FE(donie_parse_parameters,	NULL)
+	PHP_FE(donie_test_hashtable,	NULL)
 	PHP_FE_END	/* Must be the last line in donie_functions[] */
 };
 /* }}} */
