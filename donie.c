@@ -236,6 +236,26 @@ ZEND_FUNCTION(donie_parse_parameters)
 /*
  * test hashtable operations
  */
+
+static int hashtable_traverse_callback(void *pDest TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key)
+{
+	zval **zv = (zval **) pDest;
+	char *arg1 = va_arg(args, char*);
+
+	php_printf("The first argument is %s.\n", arg1);
+
+	if (hash_key->nKeyLength == 0)
+	{
+		php_printf("K-V: %d=>%Z\n", hash_key->h, *zv);
+	}
+	else
+	{
+		php_printf("K-V: %s=>%Z\n", hash_key->arKey, *zv);
+	}
+
+	return ZEND_HASH_APPLY_KEEP;
+}
+
 ZEND_FUNCTION(donie_test_hashtable)
 {
 	// init hashtable
@@ -304,11 +324,125 @@ ZEND_FUNCTION(donie_test_hashtable)
 		php_printf("The value indexed by %ld is deleted.\n", idx);
 	}
 
+	// add an integer indexed by a string key, using zend_hash_update()
+	zval *zv3;
+	MAKE_STD_ZVAL(zv3);
+	ZVAL_LONG(zv3, 1985);
+	zend_hash_update(myht, "year", sizeof("year"), &zv3, sizeof(zval *), NULL);
+	php_printf("An integer is updated to the hash-table indexed by a string key.\n");
+
+	// add a string indexed by a string key, using zend_hash_add()
+	zval *zv4;
+	MAKE_STD_ZVAL(zv4);
+	ZVAL_STRING(zv4, "Great Donie !", 1);
+	if (zend_hash_add(myht, "motto", sizeof("motto"), &zv4, sizeof(zval *), NULL) == FAILURE)
+	{
+		php_printf("Cannot add a string indexed by a string key to the hash-table, may be the index already exists.\n");
+	}
+	else
+	{
+		php_printf("A string is added to the hash-table indexed by a string key.\n");
+	}
+
+	// get the next free key
+	php_printf("The next free key will be %ld.\n", zend_hash_next_free_element(myht));
+
+	// check if a string key exists
+	char *key1 = "year";
+	if (zend_hash_exists(myht, key1, strlen(key1)+1))
+	{
+		php_printf("The key %s exists.\n", key1);
+	}
+	else
+	{
+		php_printf("The key %s does not exist.\n", key1);
+	}
+
+	// get the value indexed by a string key
+	zval **zv_dest2;
+	if (zend_hash_find(myht, key1, strlen(key1)+1, (void **) &zv_dest2) == SUCCESS)
+	{
+		php_printf("The value indexed by %s is %Z.\n", key1, *zv_dest2);
+	}
+	else
+	{
+		php_printf("Failed fetching the value indexed by %s.\n", key1);
+	}
+
+	// delete the value indexed by a string key
+	if (zend_hash_del(myht, key1, strlen(key1)+1) == SUCCESS)
+	{
+		php_printf("The value indexed by %s is deleted.\n", key1);
+	}
+	else
+	{
+		php_printf("The value indexed by %s failed to be deleted.\n", key1);
+	}
+
+	// quick operations leveraging a one-time hashed value
+	zval *zv5;
+	MAKE_STD_ZVAL(zv5);
+	ZVAL_STRING(zv5, "Great Donie Leigh !", 1);
+
+	ulong h;
+	h = zend_get_hash_value("motto", sizeof("motto"));
+	zend_hash_quick_update(myht, "motto", sizeof("motto"), h, &zv5, sizeof(zval *), NULL);
+	php_printf("The value indexed by motto is updated with the quick operation.\n");
+
+	// traverse the hash table.
+	php_printf("Begin traversing the hash table:\n");
+	zend_hash_apply_with_arguments(myht, hashtable_traverse_callback, 1, "nonsense");
+
+	// iterating the hash table
+	php_printf("Begin iterating the hash table:\n");
+	HashPosition pos;
+	zval **data;
+	char *str_idx;
+	uint str_len;
+	ulong num_idx;
+	for (zend_hash_internal_pointer_reset_ex(myht, &pos);
+		zend_hash_get_current_data_ex(myht, (void **) &data, &pos) == SUCCESS;
+		zend_hash_move_forward_ex(myht, &pos)
+	) {
+		switch (zend_hash_get_current_key_ex(myht, &str_idx, &str_len, &num_idx, 0, &pos)) {
+			case HASH_KEY_IS_LONG:
+				php_printf("K-V: %d=>%Z\n", num_idx, *data);
+				break;
+			case HASH_KEY_IS_STRING:
+				php_printf("K-V: %s=>%Z\n", str_idx, *data);
+				break;
+		}
+	}
+
 	// destroy hashtable
 	zend_hash_destroy(myht);
 	FREE_HASHTABLE(myht);
 
 	RETURN_NULL();
+}
+
+/* test array operations */
+PHP_FUNCTION(donie_get_arr)
+{
+	array_init(return_value);
+
+	// add an integer to the given position
+	add_index_long(return_value, 1, 2015);
+
+	// append a string to the array
+	add_next_index_string(return_value, "dummy string", 1);
+
+	// add a boolean value to the given key
+	add_assoc_bool(return_value, "rightOrWrong", 0);
+
+	// take care of string lengths
+	add_assoc_stringl_ex(return_value, "keyStringL\0", sizeof("keyStringL\0")-1, "valueEx\0", sizeof("valueEx\0"), 1);
+
+	// store an object in the array
+	zval *obj;
+	MAKE_STD_ZVAL(obj);
+	object_init(obj);
+	add_next_index_zval(return_value, obj);
 }
 
 /* register all functions here. */
@@ -320,6 +454,7 @@ const zend_function_entry donie_functions[] = {
 	PHP_FE(donie_get_name,	NULL)
 	PHP_FE(donie_parse_parameters,	NULL)
 	PHP_FE(donie_test_hashtable,	NULL)
+	PHP_FE(donie_get_arr,	NULL)
 	PHP_FE_END	/* Must be the last line in donie_functions[] */
 };
 /* }}} */
