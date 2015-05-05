@@ -67,6 +67,9 @@ ZEND_TSRMLS_CACHE_EXTERN();
 int time_of_minit;
 int time_of_rinit;
 
+#define PHP_DONIE_RES_NAME_FILE "Donie's File Descriptor"
+#define list_entry zend_rsrc_list_entry
+
 /*
  * Local variables:
  * tab-width: 4

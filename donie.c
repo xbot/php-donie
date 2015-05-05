@@ -33,6 +33,8 @@ ZEND_DECLARE_MODULE_GLOBALS(donie)
 
 /* True global resources - no need for thread safety here */
 static int le_donie;
+static int le_donie_file_descriptor;
+static int le_donie_file_descriptor_persist;
 
 /* {{{ PHP_INI
  */
@@ -174,6 +176,16 @@ const zend_function_entry superman_functions[] = {
 };
 /* }}} */
 
+/* {{{ c functions
+ */
+/* file descriptor destructor */
+static void php_donie_file_descriptor_dtor(zend_rsrc_list_entry *rsrc TSRMLS_CC)
+{
+	FILE *fp = (FILE*)rsrc->ptr;
+	fclose(fp);
+}
+/* }}} */
+
 /* {{{ PHP_MINIT_FUNCTION
  */
 PHP_MINIT_FUNCTION(donie)
@@ -204,6 +216,15 @@ PHP_MINIT_FUNCTION(donie)
 	INIT_CLASS_ENTRY(tmp_hero, "Hero", NULL);
 	c_hero = zend_register_internal_class_ex(&tmp_hero, c_leigh, NULL TSRMLS_CC);
 	zend_class_implements(c_hero TSRMLS_CC, 1, i_superman);
+
+	/* create a new resource type */
+	le_donie_file_descriptor = zend_register_list_destructors_ex(
+		php_donie_file_descriptor_dtor, NULL, PHP_DONIE_RES_NAME_FILE, module_number
+	);
+	/* create a persistent resource type */
+	le_donie_file_descriptor_persist = zend_register_list_destructors_ex(
+		NULL, php_donie_file_descriptor_dtor, PHP_DONIE_RES_NAME_FILE, module_number
+	);
 
 	return SUCCESS;
 }
@@ -553,6 +574,89 @@ PHP_FUNCTION(donie_get_arr)
 	MAKE_STD_ZVAL(obj);
 	object_init(obj);
 	add_next_index_zval(return_value, obj);
+}
+
+PHP_FUNCTION(donie_fopen)
+{
+	FILE *fp;
+	char *filename, *mode;
+	int filename_len, mode_len;
+	zend_bool persist = 0;
+	char *hash_key;
+	int hash_key_len;
+	list_entry *persist_file;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss|b", &filename, &filename_len, &mode, &mode_len, &persist) == FAILURE)
+	{
+		RETURN_NULL();
+	}
+	if (!filename_len || !mode_len)
+	{
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid file name or mode.");
+		RETURN_FALSE;
+	}
+
+	/* reuse persistent resource if exists */
+	hash_key_len = spprintf(&hash_key, 0, "php_donie_file_descriptor:%s-%s", filename, mode);
+	if (zend_hash_find(&EG(persistent_list), hash_key, hash_key_len+1, (void **)&persist_file) == SUCCESS)
+	{
+		ZEND_REGISTER_RESOURCE(return_value, persist_file->ptr, le_donie_file_descriptor_persist);
+		efree(hash_key);
+		return;
+	}
+
+	fp = fopen(filename, mode);
+	if (!fp)
+	{
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed opening %s with mode %s.", filename, mode);
+		RETURN_FALSE;
+	}
+
+	/* this is the key point for registering resources */
+	if (persist)
+	{
+		ZEND_REGISTER_RESOURCE(return_value, fp, le_donie_file_descriptor_persist);
+		list_entry le;
+		le.type = le_donie_file_descriptor_persist;
+		le.ptr = fp;
+		zend_hash_update(&EG(persistent_list), hash_key, hash_key_len+1, (void*)&le, sizeof(list_entry), NULL);
+	}
+	else
+	{
+		ZEND_REGISTER_RESOURCE(return_value, fp, le_donie_file_descriptor);
+	}
+	efree(hash_key);
+}
+
+PHP_FUNCTION(donie_fwrite)
+{
+	FILE *fp;
+	zval *file_resource;
+	char *data;
+	int data_len;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rs", &file_resource, &data, &data_len) == FAILURE)
+	{
+		RETURN_NULL();
+	}
+
+	ZEND_FETCH_RESOURCE2(fp, FILE*, &file_resource, -1, PHP_DONIE_RES_NAME_FILE, le_donie_file_descriptor, le_donie_file_descriptor_persist);
+	RETURN_LONG(fwrite(data, 1, data_len, fp));
+}
+
+PHP_FUNCTION(donie_fclose)
+{
+	FILE *fp;
+	zval *file_resource;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "r", &file_resource) == FAILURE)
+	{
+		RETURN_NULL();
+	}
+
+	ZEND_FETCH_RESOURCE2(fp, FILE*, &file_resource, -1, PHP_DONIE_RES_NAME_FILE, le_donie_file_descriptor, le_donie_file_descriptor_persist);
+	zend_hash_index_del(&EG(regular_list), Z_RESVAL_P(file_resource));
+	RETURN_TRUE;
 }
 
 /* register all functions here. */
