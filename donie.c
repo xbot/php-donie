@@ -226,6 +226,9 @@ PHP_MINIT_FUNCTION(donie)
 		NULL, php_donie_file_descriptor_dtor, PHP_DONIE_RES_NAME_FILE, module_number
 	);
 
+	/* define a persistent constant */
+	REGISTER_STRING_CONSTANT("PHP_DONIE_VERSION", PHP_DONIE_VERSION, CONST_PERSISTENT | CONST_CS);
+
 	return SUCCESS;
 }
 /* }}} */
