@@ -30,6 +30,7 @@
 /* If you declare any globals in php_donie.h uncomment this:
 ZEND_DECLARE_MODULE_GLOBALS(donie)
 */
+ZEND_DECLARE_MODULE_GLOBALS(donie)
 
 /* True global resources - no need for thread safety here */
 static int le_donie;
@@ -79,12 +80,16 @@ PHP_FUNCTION(confirm_donie_compiled)
 /* {{{ php_donie_init_globals
  */
 /* Uncomment this function if you have INI entries
+*/
 static void php_donie_init_globals(zend_donie_globals *donie_globals)
 {
-	donie_globals->global_value = 0;
-	donie_globals->global_string = NULL;
+	donie_globals->global_long = 2015;
+	donie_globals->global_string = "Long live Donie Leigh !";
 }
-*/
+static void php_donie_globals_dtor(zend_donie_globals *donie_globals)
+{
+	php_printf("php_donie_globals_dtor triggered.");
+}
 /* }}} */
 
 /* {{{ Classes
@@ -184,6 +189,16 @@ static void php_donie_file_descriptor_dtor(zend_rsrc_list_entry *rsrc TSRMLS_CC)
 	FILE *fp = (FILE*)rsrc->ptr;
 	fclose(fp);
 }
+
+static zend_bool php_donie_autoglobal_callback(const char *name, uint name_len TSRMLS_DC)
+{
+	zval *donie_val;
+	MAKE_STD_ZVAL(donie_val);
+	array_init(donie_val);
+	add_next_index_string(donie_val, "Hello autoglobals !", 1);
+	ZEND_SET_SYMBOL(&EG(symbol_table), "_DONIE", donie_val);
+	return 0;
+}
 /* }}} */
 
 /* {{{ PHP_MINIT_FUNCTION
@@ -228,6 +243,12 @@ PHP_MINIT_FUNCTION(donie)
 
 	/* define a persistent constant */
 	REGISTER_STRING_CONSTANT("PHP_DONIE_VERSION", PHP_DONIE_VERSION, CONST_PERSISTENT | CONST_CS);
+
+	/* init extension globals */
+	ZEND_INIT_MODULE_GLOBALS(donie, php_donie_init_globals, php_donie_globals_dtor);
+
+	/* declare userspace super globals */
+	zend_register_auto_global("_DONIE", sizeof("_DONIE")-1, 0, php_donie_autoglobal_callback TSRMLS_CC);
 
 	return SUCCESS;
 }
@@ -278,6 +299,10 @@ PHP_RSHUTDOWN_FUNCTION(donie)
 
 	/* free(time_of_rinit); */
 	/* time_of_rinit = NULL; */
+
+#ifndef ZTS
+	php_donie_globals_dtor(&donie_globals);
+#endif
 
 	return SUCCESS;
 }
@@ -662,6 +687,12 @@ PHP_FUNCTION(donie_fclose)
 	RETURN_TRUE;
 }
 
+/* show extension globals */
+ZEND_FUNCTION(donie_test_ext_globals)
+{
+	php_printf("%s", DONIE_G(global_string));
+}
+
 /* register all functions here. */
 const zend_function_entry donie_functions[] = {
 	PHP_FE(confirm_donie_compiled,	NULL)		/* For testing, remove later. */
@@ -672,6 +703,7 @@ const zend_function_entry donie_functions[] = {
 	PHP_FE(donie_parse_parameters,	NULL)
 	PHP_FE(donie_test_hashtable,	NULL)
 	PHP_FE(donie_get_arr,	NULL)
+	PHP_FE(donie_test_ext_globals,	NULL)
 	PHP_FE_END	/* Must be the last line in donie_functions[] */
 };
 /* }}} */

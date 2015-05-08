@@ -70,6 +70,12 @@ int time_of_rinit;
 #define PHP_DONIE_RES_NAME_FILE "Donie's File Descriptor"
 #define list_entry zend_rsrc_list_entry
 
+// declare extension globals
+ZEND_BEGIN_MODULE_GLOBALS(donie)
+	unsigned long global_long;
+	char *global_string;
+ZEND_END_MODULE_GLOBALS(donie)
+
 /*
  * Local variables:
  * tab-width: 4
