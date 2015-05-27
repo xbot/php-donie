@@ -25,6 +25,7 @@
 #include "php.h"
 #include "php_ini.h"
 #include "ext/standard/info.h"
+#include "ext/standard/url.h"
 #include "php_donie.h"
 
 /* If you declare any globals in php_donie.h uncomment this:
@@ -88,7 +89,7 @@ static void php_donie_init_globals(zend_donie_globals *donie_globals)
 }
 static void php_donie_globals_dtor(zend_donie_globals *donie_globals)
 {
-	php_printf("php_donie_globals_dtor triggered.");
+	/* php_printf("php_donie_globals_dtor triggered."); */
 }
 /* }}} */
 
@@ -201,6 +202,141 @@ static zend_bool php_donie_autoglobal_callback(const char *name, uint name_len T
 }
 /* }}} */
 
+static size_t php_doniestream_write(php_stream *stream, const char *buf, size_t count TSRMLS_DC)
+{
+	donie_stream_data *data = stream->abstract;
+/*
+ *     zval **var;
+ *     size_t newlen;
+ * 
+ *     if (zend_hash_find(&EG(symbol_table), data->key, data->key_len + 1, (void**)&var) == FAILURE)
+ *     {
+ *         zval *newval;
+ *         MAKE_STD_ZVAL(newval);
+ *         ZVAL_STRINGL(newval, buf, count, 1);
+ *         zend_hash_add(&EG(symbol_table), data->key, data->key_len + 1, (void*)&newval, sizeof(zval*), NULL);
+ *         return count;
+ *     }
+ * 
+ *     SEPARATE_ZVAL_IF_NOT_REF(var);
+ *     convert_to_string_ex(var);
+ *     if (data->position > Z_STRLEN_PP(var))
+ *     {
+ *         data->position = Z_STRLEN_PP(var);
+ *     }
+ * 
+ *     newlen = data->position + count;
+ *     if (newlen < Z_STRLEN_PP(var))
+ *     {
+ *         newlen = Z_STRLEN_PP(var);
+ *     }
+ *     else if (newlen > Z_STRLEN_PP(var))
+ *     {
+ *         Z_STRVAL_PP(var) = erealloc(Z_STRVAL_PP(var), newlen + 1);
+ *         Z_STRLEN_PP(var) = newlen;
+ *         Z_STRVAL_PP(var)[newlen] = 0;
+ *     }
+ *     memcpy(Z_STRVAL_PP(var) + data->position, buf, count);
+ *     data->position += count;
+ */
+	php_printf("Write to stream: %s\n", buf);
+
+	return count;
+}
+static size_t php_doniestream_read(php_stream *stream, char *buf, size_t count TSRMLS_DC)
+{
+	donie_stream_data *data = stream->abstract;
+	zval **val;
+	size_t read_size = count;
+
+/*
+ *     if (zend_hash_find(&EG(symbol_table), data->key, data->key_len + 1, (void**)&val) == FAILURE)
+ *     {
+ *         return 0;
+ *     }
+ * 
+ *     if (data->position > Z_STRLEN(**val))
+ *     {
+ *         data->position = Z_STRLEN(**val);
+ *     }
+ *     if ((Z_STRLEN(**val) - data->position) < read_size)
+ *     {
+ *         read_size = Z_STRLEN(**val) - data->position;
+ *     }
+ *     memcpy(buf, Z_STRVAL(**val) + data->position, read_size);
+ */
+	php_printf("Read from stream: %s\n", data->key);
+
+	return read_size;
+}
+static int php_doniestream_close(php_stream *stream, int close_handle TSRMLS_DC)
+{
+	donie_stream_data *data = stream->abstract;
+	efree(data->key);
+	efree(data);
+	return 0;
+}
+static php_stream_ops php_doniestream_ops = {
+	php_doniestream_write,
+	php_doniestream_read,
+	php_doniestream_close,
+	NULL, /* flush */
+	PHP_DONIESTREAM_STREAMTYPE,
+	NULL, /* seek */
+	NULL, /* cast */
+	NULL, /* stat */
+	NULL, /* set_option */
+};
+
+static php_stream *php_doniestream_wrapper_open(
+		php_stream_wrapper *wrapper,
+		const char *filename, const char *mode, int options,
+		char **opened_path, php_stream_context *context
+		STREAMS_DC TSRMLS_DC)
+{
+	donie_stream_data *data;
+	php_url *url;
+
+	if (options & STREAM_OPEN_PERSISTENT)
+	{
+		php_stream_wrapper_log_error(wrapper, options TSRMLS_CC, "Unable to open %s persistently.", filename);
+		return NULL;
+	}
+
+	url = php_url_parse(filename);
+	if (!url)
+	{
+		php_stream_wrapper_log_error(wrapper, options TSRMLS_CC, "Unable to parse url %s.", filename);
+		return NULL;
+	}
+
+	data = emalloc(sizeof(donie_stream_data));
+	data->position = 0;
+	data->key_len = strlen(url->host);
+	data->key = estrndup(url->host, data->key_len+1);
+	php_url_free(url);
+
+	return php_stream_alloc(&php_doniestream_ops, data, 0, mode);
+}
+static php_stream_wrapper_ops php_doniestream_wrapper_ops = {
+	php_doniestream_wrapper_open,
+	NULL, /* stream_closer */
+	NULL, /* stream_stat */
+	NULL, /* url_stat */
+	NULL, /* dir_opener */
+	PHP_DONIESTREAM_WRAPPER,
+	NULL, /* unlink */
+	NULL, /* rename */
+	NULL, /* mkdir */
+	NULL, /* rmdir */
+	NULL  /* stream_metadata */
+};
+static php_stream_wrapper php_doniestream_wrapper = {
+	&php_doniestream_wrapper_ops,
+	NULL, /* abstract */
+	0, /* is_url */
+};
+
 /* {{{ PHP_MINIT_FUNCTION
  */
 PHP_MINIT_FUNCTION(donie)
@@ -250,6 +386,12 @@ PHP_MINIT_FUNCTION(donie)
 	/* declare userspace super globals */
 	zend_register_auto_global("_DONIE", sizeof("_DONIE")-1, 0, php_donie_autoglobal_callback TSRMLS_CC);
 
+	/* register stream wrapper */
+	if (php_register_url_stream_wrapper(PHP_DONIESTREAM_WRAPPER, &php_doniestream_wrapper TSRMLS_CC) == FAILURE)
+	{
+		return FAILURE;
+	}
+
 	return SUCCESS;
 }
 /* }}} */
@@ -267,6 +409,12 @@ PHP_MSHUTDOWN_FUNCTION(donie)
 	 * fprintf(fp, "php-donie shutting down on module at %d\n", time(NULL));
 	 * fclose(fp);
 	 */
+
+	/* unregister stream wrapper */
+	if (php_unregister_url_stream_wrapper(PHP_DONIESTREAM_WRAPPER TSRMLS_CC) == FAILURE)
+	{
+		return FAILURE;
+	}
 
 	return SUCCESS;
 }

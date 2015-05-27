@@ -76,6 +76,14 @@ ZEND_BEGIN_MODULE_GLOBALS(donie)
 	char *global_string;
 ZEND_END_MODULE_GLOBALS(donie)
 
+#define PHP_DONIESTREAM_WRAPPER "donie"
+#define PHP_DONIESTREAM_STREAMTYPE "doniestream"
+typedef struct _donie_stream_data {
+	off_t position;
+	char *key;
+	int key_len;
+} donie_stream_data;
+
 /*
  * Local variables:
  * tab-width: 4
