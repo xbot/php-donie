@@ -202,6 +202,8 @@ static zend_bool php_donie_autoglobal_callback(const char *name, uint name_len T
 }
 /* }}} */
 
+/* {{{ stream implementation
+ */
 static size_t php_doniestream_write(php_stream *stream, const char *buf, size_t count TSRMLS_DC)
 {
 	donie_stream_data *data = stream->abstract;
@@ -336,6 +338,7 @@ static php_stream_wrapper php_doniestream_wrapper = {
 	NULL, /* abstract */
 	0, /* is_url */
 };
+/* }}} */
 
 /* {{{ PHP_MINIT_FUNCTION
  */
@@ -841,6 +844,28 @@ ZEND_FUNCTION(donie_test_ext_globals)
 	php_printf("%s", DONIE_G(global_string));
 }
 
+/* reimplement fopen using stream */
+ZEND_FUNCTION(donie_stream_fopen)
+{
+	php_stream *stream;
+	char *path, *mode;
+	int path_len, mode_len;
+	int options = ENFORCE_SAFE_MODE|REPORT_ERRORS;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss", &path, &path_len, &mode, &mode_len) == FAILURE)
+	{
+		return;
+	}
+
+	stream = php_stream_open_wrapper(path, mode, options, NULL);
+	if (!stream)
+	{
+		RETURN_FALSE;
+	}
+
+	php_stream_to_zval(stream, return_value);
+}
+
 /* register all functions here. */
 const zend_function_entry donie_functions[] = {
 	PHP_FE(confirm_donie_compiled,	NULL)		/* For testing, remove later. */
@@ -852,6 +877,7 @@ const zend_function_entry donie_functions[] = {
 	PHP_FE(donie_test_hashtable,	NULL)
 	PHP_FE(donie_get_arr,	NULL)
 	PHP_FE(donie_test_ext_globals,	NULL)
+	PHP_FE(donie_stream_fopen,	NULL)
 	PHP_FE_END	/* Must be the last line in donie_functions[] */
 };
 /* }}} */
