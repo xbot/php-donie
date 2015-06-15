@@ -26,6 +26,7 @@
 #include "php_ini.h"
 #include "ext/standard/info.h"
 #include "ext/standard/url.h"
+#include "ext/standard/php_string.h"
 #include "php_donie.h"
 
 /* If you declare any globals in php_donie.h uncomment this:
@@ -340,6 +341,73 @@ static php_stream_wrapper php_doniestream_wrapper = {
 };
 /* }}} */
 
+/* {{{ stream filter implementation
+ */
+typedef struct {
+	char is_persistent;
+	char *from_chars;
+	char *to_chars;
+	int tr_len;
+} php_donie_filter_data;
+
+static php_stream_filter_status_t php_donie_stream_filter(
+	php_stream *stream, php_stream_filter *thisfilter,
+	php_stream_bucket_brigade *buckets_in,
+	php_stream_bucket_brigade *buckets_out,
+	size_t *bytes_consumed, int flags TSRMLS_DC
+) {
+	php_donie_filter_data *data = thisfilter->abstract;
+	php_stream_bucket *bucket;
+	size_t consumed = 0;
+
+	while(buckets_in->head) {
+		bucket = php_stream_bucket_make_writeable(buckets_in->head TSRMLS_CC);
+		php_strtr(bucket->buf, bucket->buflen, data->from_chars, data->to_chars, data->tr_len);
+		consumed += bucket->buflen;
+		php_stream_bucket_append(buckets_out, bucket TSRMLS_CC);
+	}
+
+	if (bytes_consumed) {
+		*bytes_consumed = consumed;
+	}
+
+	return PSFS_PASS_ON;
+}
+
+static void php_donie_stream_filter_dtor(
+	php_stream_filter *thisfilter TSRMLS_DC
+) {
+	php_donie_filter_data *data = thisfilter->abstract;
+	pefree(data, data->is_persistent);
+}
+
+static php_stream_filter_ops php_donie_stream_filter_ops = {
+	php_donie_stream_filter,
+	php_donie_stream_filter_dtor,
+	"donie.to_upper_case"
+};
+
+static php_stream_filter *php_donie_stream_filter_create(
+	const char *name, zval *param, int persistent TSRMLS_DC
+) {
+	php_donie_filter_data *data;
+
+	data = pemalloc(sizeof(php_donie_filter_data), persistent);
+	if (!data) {
+		return NULL;
+	}
+	data->is_persistent = persistent;
+	data->from_chars = "abcdefghijklmnopqrstuvwxyz";
+	data->to_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	data->tr_len = strlen(data->from_chars);
+
+	return php_stream_filter_alloc(&php_donie_stream_filter_ops, data, persistent);
+}
+static php_stream_filter_factory php_donie_stream_uppercase_factory = {
+	php_donie_stream_filter_create
+};
+/* }}} */
+
 /* {{{ PHP_MINIT_FUNCTION
  */
 PHP_MINIT_FUNCTION(donie)
@@ -395,6 +463,9 @@ PHP_MINIT_FUNCTION(donie)
 		return FAILURE;
 	}
 
+	/* register a filter */
+	php_stream_filter_register_factory("donie.to_upper_case", &php_donie_stream_uppercase_factory TSRMLS_CC);
+
 	return SUCCESS;
 }
 /* }}} */
@@ -418,6 +489,9 @@ PHP_MSHUTDOWN_FUNCTION(donie)
 	{
 		return FAILURE;
 	}
+
+	/* unregister the filter */
+	php_stream_filter_unregister_factory("donie.to_upper_case" TSRMLS_CC);
 
 	return SUCCESS;
 }
